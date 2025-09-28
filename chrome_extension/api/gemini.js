@@ -1,10 +1,7 @@
-// Example serverless function for secure Gemini integration
-// This can be deployed to Vercel, Netlify, or Google Cloud Functions
-
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default async function handler(req, res) {
-  // CORS headers for browser requests
+  
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -23,88 +20,74 @@ export default async function handler(req, res) {
   try {
     const { prompt, facts } = req.body;
 
+    console.log('DEBUG: Serverless Gemini API called');
+    console.log('DEBUG: Prompt:', prompt);
+    console.log('DEBUG: Facts:', facts);
+    console.log('DEBUG: API key exists:', !!process.env.GEMINI_API_KEY);
+
     if (!process.env.GEMINI_API_KEY) {
+      console.error('DEBUG: No API key found');
       res.status(500).json({ error: 'Gemini API key not configured' });
       return;
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+    console.log('DEBUG: Model initialized successfully');
 
     const fullPrompt = `
-You are a financial advisor helping users understand their spending patterns and financial decisions.
+You are CartWatch AI, a friendly and knowledgeable financial assistant helping users make smarter financial decisions. You have access to their transaction data and spending patterns.
 
-Context: ${JSON.stringify(facts, null, 2)}
+FINANCIAL CONTEXT:
+${JSON.stringify(facts, null, 2)}
 
-User Request: ${prompt}
+PERSONALITY:
+- Be supportive and encouraging, never judgmental
+- Use friendly, conversational language
+- Focus on actionable advice and practical tips
+- Acknowledge good financial habits when you see them
+- Provide specific, data-driven insights when possible
 
-Please provide a helpful, concise response (2-3 sentences) that explains the financial implications in friendly, accessible language. Focus on actionable insights.
+CAPABILITIES:
+- Analyze spending patterns and trends
+- Suggest budget optimizations
+- Identify areas for savings
+- Provide personalized financial advice
+- Explain complex financial concepts simply
+- Help set realistic financial goals
+
+USER QUESTION: ${prompt}
+
+Please provide a helpful response (2-4 sentences) that:
+1. Addresses their specific question
+2. Uses their actual financial data when relevant
+3. Offers practical, actionable advice
+4. Maintains an encouraging and supportive tone
+5. Includes specific numbers or insights when helpful
     `;
 
+    console.log('DEBUG: Sending prompt to Gemini (first 200 chars):', fullPrompt.substring(0, 200) + '...');
+
     const result = await model.generateContent(fullPrompt);
+    console.log('DEBUG: Gemini result received');
+
     const response = await result.response;
+    console.log('DEBUG: Response extracted');
+
+    const responseText = response.text();
+    console.log('DEBUG: Response text:', responseText);
 
     res.status(200).json({
-      result: response.text(),
+      result: responseText,
       success: true
     });
 
   } catch (error) {
     console.error('Gemini API error:', error);
+    console.error('Error details:', error.message);
     res.status(500).json({
-      error: 'Failed to generate response',
+      error: 'Failed to generate response: ' + error.message,
       success: false
     });
   }
 }
-
-// Alternative Express.js example
-/*
-const express = require('express');
-const cors = require('cors');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-app.post('/api/gemini', async (req, res) => {
-  try {
-    const { prompt, facts } = req.body;
-
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const fullPrompt = `
-You are a financial advisor helping users understand their spending patterns and financial decisions.
-
-Context: ${JSON.stringify(facts, null, 2)}
-
-User Request: ${prompt}
-
-Please provide a helpful, concise response (2-3 sentences) that explains the financial implications in friendly, accessible language. Focus on actionable insights.
-    `;
-
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-
-    res.json({
-      result: response.text(),
-      success: true
-    });
-
-  } catch (error) {
-    console.error('Gemini API error:', error);
-    res.status(500).json({
-      error: 'Failed to generate response',
-      success: false
-    });
-  }
-});
-
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Gemini API server running on port ${PORT}`);
-});
-*/

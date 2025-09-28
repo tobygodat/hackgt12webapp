@@ -4,14 +4,15 @@ A production-quality React web application that visualizes the long-term impact 
 
 ## Features
 
--   **Financial Twin Simulation**: Monte Carlo simulation of purchase impact over 12-24 months
--   **Real-time Balance Projections**: P10/P50/P90 confidence bands for future financial health
--   **Smart Recommendations**: AI-powered suggestions for spending cuts and substitutes
--   **Transaction Management**: Complete transaction tracking with filtering and analysis
--   **Insights Dashboard**: Visual analytics of spending patterns and financial health
--   **Dark-first Design**: Modern, accessible UI with Tailwind CSS
--   **Firebase Integration**: Secure authentication and real-time data storage
--   **Optional AI Integration**: Gemini-powered financial advice and explanations
+-   **Smart Recommendations**: AI-powered suggestions for spending cuts and substitutes based on transaction analysis
+-   **Transaction Management**: Complete transaction tracking with filtering, categorization, and detailed analysis
+-   **Insights Dashboard**: Visual analytics of spending patterns, financial health scores, and trend analysis
+-   **User Authentication**: Secure sign-in/sign-up with Firebase Auth
+-   **Profile Management**: User profile with financial health scoring and account management
+-   **Simulation Details**: Detailed views of financial simulations with interactive charts
+-   **Modern UI**: Dark-first design with responsive layout using Tailwind CSS
+-   **Firebase Integration**: Secure authentication and real-time data storage with Firestore
+-   **AI Chat Integration**: Optional Gemini-powered financial advice and explanations via floating chat
 
 ## Tech Stack
 
@@ -41,7 +42,7 @@ A production-quality React web application that visualizes the long-term impact 
 
 ```bash
 git clone <repository-url>
-cd cartwatch
+cd chrome_extension
 npm install
 ```
 
@@ -103,18 +104,31 @@ src/
 ├── components/           # Reusable UI components
 │   ├── Layout.jsx       # Main app layout with navigation
 │   ├── Card.jsx         # Styled card container
-│   ├── Charts/          # Chart components (Line, Pie, Bar)
-│   └── ...
+│   ├── ChartBar.jsx     # Bar chart component
+│   ├── ChartLineBand.jsx # Line chart with confidence bands
+│   ├── ChartPie.jsx     # Pie chart component
+│   ├── FilterBar.jsx    # Transaction filtering interface
+│   ├── FloatingChat.jsx # AI chat interface
+│   ├── KPI.jsx          # Key performance indicator cards
+│   ├── Money.jsx        # Currency formatting component
+│   ├── Pill.jsx         # Tag/pill component
+│   ├── ProtectedRoute.jsx # Route protection wrapper
+│   ├── PublicRoute.jsx  # Public route wrapper
+│   └── TransactionRow.jsx # Individual transaction display
 ├── pages/               # Main application pages
-│   ├── Dashboard.jsx    # Financial twin dashboard
-│   ├── Transactions.jsx # Transaction management
+│   ├── Dashboard.jsx    # Main dashboard with overview
 │   ├── Insights.jsx     # Analytics and insights
-│   └── Profile.jsx      # User profile and settings
+│   ├── Profile.jsx      # User profile and settings
+│   ├── SignIn.jsx       # User authentication
+│   ├── SignUp.jsx       # User registration
+│   ├── SimulationDetail.jsx # Detailed simulation view
+│   └── Transactions.jsx # Transaction management
 ├── hooks/               # Custom React hooks
 │   ├── useAuth.js       # Authentication management
 │   ├── useAccounts.js   # Account data management
+│   ├── useSimulation.js # Financial simulation
 │   ├── useTransactions.js # Transaction data
-│   └── useSimulation.js # Financial simulation
+│   └── useUser.js       # User profile management
 ├── domain/              # Core business logic
 │   ├── simulateTwin.js  # Monte Carlo simulation engine
 │   ├── recommend.js     # Recommendation algorithm
@@ -128,6 +142,18 @@ src/
 └── theme/               # Design system
     └── colors.js        # Color palette
 ```
+
+## Application Structure
+
+CartWatch is organized into several main sections:
+
+-   **Dashboard**: Overview of financial health, recent transactions, and quick insights
+-   **Insights**: Detailed analytics with charts, spending patterns, and financial health metrics
+-   **Transactions**: Complete transaction management with filtering and categorization
+-   **Profile**: User settings, account management, and financial health scoring
+-   **Simulation Detail**: In-depth view of financial twin simulations with interactive charts
+
+The application uses protected routes for authenticated users and provides a floating AI chat interface for financial advice.
 
 ## Core Concepts
 
@@ -152,15 +178,17 @@ Analyzes transaction history to suggest smart alternatives:
 ```javascript
 // User profile
 {
-  displayName: "string",
+  uid: "string",
   email: "string",
-  currency: "USD",
-  riskTolerance: "medium"
+  username: "string",
+  customerID: "string", // For external account integration
+  displayName: "string"
 }
 
 // Financial accounts
 {
-  type: "checking|savings|cc|loan",
+  customerID: "string",
+  type: "checking|savings|credit|loan",
   name: "string",
   balance: number,
   apr?: number,
@@ -169,11 +197,20 @@ Analyzes transaction history to suggest smart alternatives:
 
 // Transactions
 {
+  uid: "string", // User ID
   amount: number,
   category: "string",
   merchant: "string",
+  description: "string",
   date: Timestamp,
   type: "debit|credit"
+}
+
+// Savings goals
+{
+  uid: "string",
+  amount: number,
+  targetDate?: Timestamp
 }
 ```
 
@@ -201,8 +238,9 @@ npm test
 Tests cover:
 
 -   Core simulation logic (`simulateTwin`)
--   Recommendation algorithm (`rankRecommendations`)
+-   Recommendation algorithm (`recommend`)
 -   UI components (Money, Charts, etc.)
+-   Domain logic and utility functions
 
 ### Gemini AI Integration
 

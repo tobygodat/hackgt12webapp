@@ -1,16 +1,40 @@
 import { Outlet, NavLink } from "react-router-dom";
-import { Home, CreditCard, TrendingUp, User, LogOut } from "lucide-react";
+import { TrendingUp, User, LogOut } from "lucide-react";
 import { useAuth } from "../hooks/useAuth.js";
+import FloatingChat from "./FloatingChat.jsx";
+import { useState, useEffect } from "react";
+import { getPurchaseTransactions } from "../lib/firestore.js";
 
 export default function Layout() {
     const { user, logout } = useAuth();
+    const [transactionData, setTransactionData] = useState([]);
 
     const navItems = [
-        { to: "/", icon: Home, label: "Dashboard" },
-        { to: "/transactions", icon: CreditCard, label: "Transactions" },
-        { to: "/insights", icon: TrendingUp, label: "Insights" },
+        { to: "/", icon: TrendingUp, label: "Insights" },
         { to: "/profile", icon: User, label: "Profile" },
     ];
+
+    // Fetch transaction data for the financial assistant
+    useEffect(() => {
+        async function fetchTransactions() {
+            if (!user) return;
+
+            try {
+                // Get last 3 months of purchase transactions
+                const threeMonthsAgo = new Date();
+                threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+                const transactions = await getPurchaseTransactions(user.uid, {
+                    start: threeMonthsAgo
+                });
+                setTransactionData(transactions);
+            } catch (error) {
+                console.error("Error fetching transactions for chat:", error);
+            }
+        }
+
+        fetchTransactions();
+    }, [user]);
 
     const handleLogout = async () => {
         try {
@@ -75,6 +99,9 @@ export default function Layout() {
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <Outlet />
             </main>
+
+            {/* Floating Chat Assistant - only show when user is logged in */}
+            {user && <FloatingChat transactionData={transactionData} />}
         </div>
     );
 }

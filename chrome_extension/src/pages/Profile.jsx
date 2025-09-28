@@ -78,13 +78,64 @@ export default function Profile() {
         };
     }, [user]);
 
-    const netWorth = account?.balance || 0;
-    const balance = netWorth; // mirrored
-    const savingsRate = useMemo(() => {
-        if (!savingsGoal) return 0;
-        const monthlySavings = Math.max(0, monthIncome - monthSpend);
-        return Math.min(100, (monthlySavings / savingsGoal) * 100);
-    }, [monthIncome, monthSpend, savingsGoal]);
+    const balance = account?.balance || 0;
+    // Financial Health Score Algorithm (0-100)
+    const financialHealthScore = useMemo(() => {
+        if (!monthIncome && !monthSpend && !balance) return 0;
+
+        let score = 0;
+        let factors = 0;
+
+        // Factor 1: Savings Rate (30% weight)
+        if (monthIncome > 0) {
+            const savingsRate = Math.max(0, (monthIncome - monthSpend) / monthIncome);
+            score += Math.min(30, savingsRate * 150); // 20% savings = 30 points
+            factors++;
+        }
+
+        // Factor 2: Account Balance Health (25% weight)
+        if (balance >= 0) {
+            if (balance > monthSpend * 3) score += 25; // 3+ months expenses = full points
+            else if (balance > monthSpend) score += 15; // 1-3 months = partial points
+            else if (balance > 0) score += 5; // Some savings = minimal points
+            factors++;
+        }
+
+        // Factor 3: Spending Consistency (20% weight)
+        if (monthSpend > 0 && monthIncome > 0) {
+            const spendingRatio = monthSpend / monthIncome;
+            if (spendingRatio <= 0.5) score += 20; // Spending ≤50% of income = excellent
+            else if (spendingRatio <= 0.7) score += 15; // 50-70% = good
+            else if (spendingRatio <= 0.9) score += 10; // 70-90% = fair
+            else score += 5; // >90% = needs improvement
+            factors++;
+        }
+
+        // Factor 4: Emergency Fund Buffer (15% weight)
+        if (balance > 0 && monthSpend > 0) {
+            const emergencyMonths = balance / monthSpend;
+            if (emergencyMonths >= 6) score += 15; // 6+ months = excellent
+            else if (emergencyMonths >= 3) score += 12; // 3-6 months = good
+            else if (emergencyMonths >= 1) score += 8; // 1-3 months = fair
+            else score += 3; // <1 month = minimal
+            factors++;
+        }
+
+        // Factor 5: Income Stability Bonus (10% weight)
+        if (monthIncome > monthSpend * 2) {
+            score += 10; // High income vs spending = bonus points
+            factors++;
+        } else if (monthIncome > monthSpend) {
+            score += 5; // Positive income = some bonus
+            factors++;
+        }
+
+        // Normalize score if we don't have all factors
+        const maxPossibleScore = 100;
+        const actualMaxScore = factors > 0 ? (score / factors) * 5 : 0; // Rough normalization
+
+        return Math.min(100, Math.max(0, Math.round(actualMaxScore)));
+    }, [monthIncome, monthSpend, balance]);
 
     const saveUsername = async () => {
         if (!user) return;
@@ -178,17 +229,7 @@ export default function Profile() {
                     </Card>
 
                     {/* Insights within Profile */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <Card title="Net Worth">
-                            {loading ? (
-                                <div className="animate-pulse h-8 bg-surface rounded" />
-                            ) : (
-                                <Money
-                                    amount={netWorth}
-                                    className="text-2xl font-bold"
-                                />
-                            )}
-                        </Card>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Card title="Balance">
                             {loading ? (
                                 <div className="animate-pulse h-8 bg-surface rounded" />
@@ -211,32 +252,28 @@ export default function Profile() {
                         </Card>
                     </div>
 
-                    <Card title="Savings Rate">
+                    <Card title="Financial Health Score">
                         {loading ? (
                             <div className="animate-pulse h-24 bg-surface rounded-xl" />
                         ) : (
-                            <div className="flex items-end justify-between">
+                            <div className="flex items-center justify-between">
                                 <div>
-                                    <div className="text-3xl font-bold">
-                                        {savingsRate.toFixed(1)}%
+                                    <div className="text-4xl font-bold">
+                                        {financialHealthScore}/100
                                     </div>
                                     <p className="text-text-muted">
-                                        Goal:{" "}
-                                        {savingsGoal ? (
-                                            <Money amount={savingsGoal} />
-                                        ) : (
-                                            "Not set"
-                                        )}
+                                        {financialHealthScore >= 80 ? "Excellent" :
+                                         financialHealthScore >= 60 ? "Good" :
+                                         financialHealthScore >= 40 ? "Fair" : "Needs Improvement"}
                                     </p>
                                 </div>
-                                <div className="text-right text-sm text-text-muted">
-                                    <div>
-                                        Income this month:{" "}
-                                        <Money amount={monthIncome} />
-                                    </div>
-                                    <div>
-                                        Spend this month:{" "}
-                                        <Money amount={monthSpend} />
+                                <div className="text-right">
+                                    <div className={`w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold ${
+                                        financialHealthScore >= 80 ? "border-green-500 text-green-500" :
+                                        financialHealthScore >= 60 ? "border-blue-500 text-blue-500" :
+                                        financialHealthScore >= 40 ? "border-yellow-500 text-yellow-500" : "border-red-500 text-red-500"
+                                    }`}>
+                                        {financialHealthScore}
                                     </div>
                                 </div>
                             </div>

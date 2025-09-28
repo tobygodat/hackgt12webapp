@@ -1,30 +1,28 @@
-import { useMemo } from "react";
+  import { useMemo } from "react";
 import Card from "../components/Card.jsx";
 import ChartPie from "../components/ChartPie.jsx";
 import ChartBar from "../components/ChartBar.jsx";
 import KPI from "../components/KPI.jsx";
 import Money from "../components/Money.jsx";
-import { useTransactions } from "../hooks/useTransactions.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { subMonths, format, startOfMonth, endOfMonth } from "date-fns";
 import {
     getAccountByCustomerId,
-    getSavingsGoal,
     getUserProfile,
+    getPurchaseTransactions,
 } from "../lib/firestore.js";
 import { useEffect, useState } from "react";
 
 export default function Insights() {
     const { user } = useAuth();
-    const { transactions } = useTransactions({ pageSize: 1000 });
     const [balance, setBalance] = useState(0);
-    const [savingsGoal, setSavingsGoal] = useState(0);
     const [monthSpend, setMonthSpend] = useState(0);
-    const [monthIncome, setMonthIncome] = useState(0);
+    const [purchaseTransactions, setPurchaseTransactions] = useState([]);
 
+    // Separate effect for profile data that doesn't depend on transactions
     useEffect(() => {
         let isMounted = true;
-        async function hydrate() {
+        async function hydrateProfile() {
             if (!user) return;
             // balance from accounts/{CustomerID} via profile
             const profile = await getUserProfile(user.uid);
@@ -33,54 +31,66 @@ export default function Insights() {
                 const acct = await getAccountByCustomerId(customerID);
                 if (isMounted) setBalance(acct?.balance || 0);
             }
-            const goal = await getSavingsGoal(user.uid);
-            if (isMounted) setSavingsGoal(goal || 0);
-
-            // current month spend/income
-            const start = startOfMonth(new Date());
-            const end = endOfMonth(new Date());
-            const txns = transactions.filter((t) => {
-                const d = t.date?.toDate?.() || new Date(t.date);
-                return d >= start && d <= end;
-            });
-            let spend = 0,
-                income = 0;
-            txns.forEach((t) => {
-                const amt =
-                    typeof t.amount === "number"
-                        ? t.amount
-                        : parseFloat(t.amount) || 0;
-                const isDebit = t.type === "debit" || amt < 0;
-                if (isDebit) spend += Math.abs(amt);
-                else income += Math.abs(amt);
-            });
-            if (isMounted) {
-                setMonthSpend(spend);
-                setMonthIncome(income);
-            }
         }
-        hydrate();
+        hydrateProfile();
         return () => {
             isMounted = false;
         };
-    }, [user, transactions]);
+    }, [user]);
+
+    // Separate effect for purchase transaction calculations
+    useEffect(() => {
+        let isMounted = true;
+        async function fetchPurchaseData() {
+            if (!user) return;
+
+            try {
+                // Get current month date range
+                const start = startOfMonth(new Date());
+                const end = endOfMonth(new Date());
+
+                // Fetch purchase transactions directly from Firestore for current month
+                const currentMonthPurchases = await getPurchaseTransactions(user.uid, { start, end });
+
+                // Fetch all purchase transactions for charts (last 6 months)
+                const sixMonthsAgo = subMonths(new Date(), 6);
+                const allPurchases = await getPurchaseTransactions(user.uid, { start: sixMonthsAgo });
+
+                if (isMounted) {
+                    // Calculate total spending from current month purchase transactions
+                    const totalSpend = currentMonthPurchases.reduce((sum, t) => {
+                        const amt = typeof t.amount === "number" ? t.amount : parseFloat(t.amount) || 0;
+                        return sum + Math.abs(amt);
+                    }, 0);
+
+                    setMonthSpend(totalSpend);
+                    setPurchaseTransactions(allPurchases);
+                }
+            } catch (error) {
+                console.error("Error fetching purchase transactions:", error);
+            }
+        }
+
+        fetchPurchaseData();
+        return () => {
+            isMounted = false;
+        };
+    }, [user]);
 
     // Category distribution for pie chart
     const categoryData = useMemo(() => {
         const categories = {};
-        transactions.forEach((t) => {
-            if (t.type === "debit" || t.amount < 0) {
-                const category = t.category || "Other";
-                categories[category] =
-                    (categories[category] || 0) + Math.abs(t.amount);
-            }
+        purchaseTransactions.forEach((t) => {
+            const category = t.category || t.description || "Other";
+            const amt = typeof t.amount === "number" ? t.amount : parseFloat(t.amount) || 0;
+            categories[category] = (categories[category] || 0) + Math.abs(amt);
         });
 
         return Object.entries(categories)
             .map(([name, value]) => ({ name, value }))
             .sort((a, b) => b.value - a.value)
             .slice(0, 6);
-    }, [transactions]);
+    }, [purchaseTransactions]);
 
     // Monthly spending for bar chart
     const monthlySpending = useMemo(() => {
@@ -94,25 +104,32 @@ export default function Insights() {
             months[monthKey] = 0;
         }
 
-        transactions.forEach((t) => {
-            if (t.type === "debit" || t.amount < 0) {
-                const date = t.date?.toDate?.() || new Date(t.date);
-                const monthKey = format(date, "MMM yyyy");
-                if (Object.prototype.hasOwnProperty.call(months, monthKey)) {
-                    months[monthKey] += Math.abs(t.amount);
-                }
+        purchaseTransactions.forEach((t) => {
+            const date = t.date || new Date(t.purchase_date);
+            const monthKey = format(date, "MMM yyyy");
+            if (Object.prototype.hasOwnProperty.call(months, monthKey)) {
+                const amt = typeof t.amount === "number" ? t.amount : parseFloat(t.amount) || 0;
+                months[monthKey] += Math.abs(amt);
             }
         });
 
         return Object.entries(months).map(([name, value]) => ({ name, value }));
-    }, [transactions]);
+    }, [purchaseTransactions]);
 
-    // Calculate savings rate
-    const savingsRate = useMemo(() => {
-        if (!savingsGoal) return 0;
-        const monthlySavings = Math.max(0, monthIncome - monthSpend);
-        return Math.min(100, (monthlySavings / savingsGoal) * 100);
-    }, [monthIncome, monthSpend, savingsGoal]);
+    // Color palette for charts and categories
+    const getCategoryColor = (index) => {
+        const colors = [
+            '#3B82F6', // Blue
+            '#EF4444', // Red
+            '#10B981', // Green
+            '#F59E0B', // Amber
+            '#8B5CF6', // Purple
+            '#EC4899', // Pink
+            '#06B6D4', // Cyan
+            '#84CC16', // Lime
+        ];
+        return colors[index % colors.length];
+    };
 
     // Average monthly spending
     // const avgMonthlySpending = useMemo(() => {
@@ -143,7 +160,7 @@ export default function Insights() {
             </div>
 
             {/* KPI Row */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card>
                     <KPI
                         label="Current Balance"
@@ -153,25 +170,12 @@ export default function Insights() {
                 </Card>
                 <Card>
                     <KPI
-                        label="Savings Rate"
-                        value={`${savingsRate.toFixed(1)}%`}
-                        trend={
-                            savingsRate > 20
-                                ? "up"
-                                : savingsRate > 10
-                                ? "neutral"
-                                : "down"
-                        }
-                    />
-                </Card>
-                <Card>
-                    <KPI
-                        label="This Month Spend"
+                        label="Spending this month"
                         value={<Money amount={monthSpend} />}
                     />
                 </Card>
                 <Card>
-                    <KPI label="Transactions" value={transactions.length} />
+                    <KPI label="Transactions" value={purchaseTransactions.length} />
                 </Card>
             </div>
 
@@ -192,7 +196,7 @@ export default function Insights() {
 
                 <Card title="Monthly Spending Trend" subtitle="Last 6 months">
                     {monthlySpending.length > 0 ? (
-                        <ChartBar data={monthlySpending} />
+                        <ChartBar data={monthlySpending} color="#3B82F6" />
                     ) : (
                         <div className="h-64 flex items-center justify-center text-text-muted">
                             No spending data available
@@ -202,13 +206,11 @@ export default function Insights() {
             </div>
 
             {/* Detailed Analysis */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
                 <Card
-                    title="Top Spending Categories"
-                    subtitle="This month's biggest expenses"
-                >
+                    title="Top Spending Categories">
                     <div className="space-y-3">
-                        {categoryData.slice(0, 5).map((category) => (
+                        {categoryData.slice(0, 5).map((category, index) => (
                             <div
                                 key={category.name}
                                 className="flex items-center justify-between"
@@ -217,8 +219,7 @@ export default function Insights() {
                                     <div
                                         className="w-3 h-3 rounded-full"
                                         style={{
-                                            backgroundColor:
-                                                "var(--brand-glow)",
+                                            backgroundColor: getCategoryColor(index),
                                         }}
                                     />
                                     <span className="text-text">
@@ -228,50 +229,6 @@ export default function Insights() {
                                 <Money amount={category.value} />
                             </div>
                         ))}
-                    </div>
-                </Card>
-
-                <Card
-                    title="Financial Health Score"
-                    subtitle="Based on your spending patterns"
-                >
-                    <div className="text-center">
-                        <div className="text-4xl font-bold text-text mb-2">
-                            {Math.round(
-                                Math.max(60, Math.min(95, 70 + savingsRate))
-                            )}
-                        </div>
-                        <p className="text-text-muted mb-4">Overall Score</p>
-                        <div className="space-y-2 text-left">
-                            <div className="flex justify-between">
-                                <span className="text-text-muted">
-                                    Savings Rate
-                                </span>
-                                <span
-                                    className={
-                                        savingsRate > 20
-                                            ? "text-success"
-                                            : "text-warning"
-                                    }
-                                >
-                                    {savingsRate > 20
-                                        ? "Excellent"
-                                        : "Needs Improvement"}
-                                </span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-text-muted">
-                                    Spending Consistency
-                                </span>
-                                <span className="text-success">Good</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-text-muted">
-                                    Category Balance
-                                </span>
-                                <span className="text-success">Healthy</span>
-                            </div>
-                        </div>
                     </div>
                 </Card>
             </div>
