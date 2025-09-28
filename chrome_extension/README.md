@@ -130,7 +130,6 @@ src/
 │   ├── useTransactions.js # Transaction data
 │   └── useUser.js       # User profile management
 ├── domain/              # Core business logic
-│   ├── simulateTwin.js  # Monte Carlo simulation engine
 │   ├── recommend.js     # Recommendation algorithm
 │   └── util.js          # Utility functions
 ├── lib/                 # External service integrations
@@ -154,24 +153,6 @@ CartWatch is organized into several main sections:
 -   **Simulation Detail**: In-depth view of financial twin simulations with interactive charts
 
 The application uses protected routes for authenticated users and provides a floating AI chat interface for financial advice.
-
-## Core Concepts
-
-### Financial Twin Simulation
-
-The heart of CartWatch is the Monte Carlo simulation that models how a purchase impacts your financial future:
-
-1. **Inputs**: Purchase amount, timeline, income/expense volatility, current accounts
-2. **Process**: 1000 simulation runs with randomized monthly cash flows
-3. **Outputs**: P10/P50/P90 balance projections, debt impact, goal delays
-
-### Recommendation Engine
-
-Analyzes transaction history to suggest smart alternatives:
-
--   Identifies discretionary spending categories
--   Ranks by potential savings vs. lifestyle friction
--   Suggests specific cuts and substitutes
 
 ### Data Model
 
